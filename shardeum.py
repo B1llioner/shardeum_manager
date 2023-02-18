@@ -96,6 +96,13 @@ def PriceToStr(price):
     return price
 
 
+async def send_big_messsage(chat_id, message, mode=None):
+    if len(message) > 4096:
+        for x in range(0, len(message), 4096):
+            await bot.send_message(chat_id,message[x:x+4096], parse_mode=mode)
+    else:
+        await bot.send_message(chat_id, message, parse_mode=mode)
+
 
 async def get_node_info(node_params):
     node_url = node_params["host"]
@@ -128,9 +135,9 @@ async def get_nodes_info():
     
     
     for i in results:
+        node_name = i["node_params"]["name"]
+        node_host = i["node_params"]["host"]
         if i["success"]:
-            node_name = i["node_params"]["name"]
-            node_host = i["node_params"]["host"]
             node_params = i["node_params"]
             node_message = i["message"]
             stake_amount = node_message["lockedStake"] + " SHM"
@@ -150,10 +157,16 @@ async def get_nodes_info():
                 messages.append(message)
                 errors.append(node_name)
 
+            elif state == "standby":
+                message = f"❌({state.upper()}) (Нода ещё не синхронизирована) | {node_name} ({node_host}) | Staked: {stake_amount} |"
+                messages.append(message)
+
 
         else:
             message = f"❌ | {node_name} ({node_host})"
             errors.append(node_name)
+    
+    
     
     return {"text": information_message.format("\n\n".join(messages), PriceToStr(total_rewards)), "errors": errors}
 
@@ -251,6 +264,7 @@ async def start_nodes(nodes_names):
 
 
 
+
 async def restart_nodes():
     while True:
         actual_info = await get_nodes_info()
@@ -258,9 +272,12 @@ async def restart_nodes():
         errors_count = len(errors_names)
         
         if errors_count > 0:
+            print(actual_info)
+            
             await bot.send_message(ADMIN, f"Обнаружено {errors_count} отключенных нод({', '.join(errors_names)}), перезапускаю их!")
             text = await start_nodes(actual_info["errors"])
-            await bot.send_message(ADMIN, text)
+            
+            await send_big_messsage(ADMIN, text, "HTML")
 
         await asyncio.sleep(5)
 
@@ -280,7 +297,7 @@ async def welcome(message: Message):
 async def nodes_info(message: Message):
     if message.from_user.id == ADMIN:
         nodes_info = await get_nodes_info()
-        await bot.send_message(message.from_user.id, nodes_info["text"])
+        await send_big_messsage(message.from_user.id, nodes_info["text"], "HTML")
 
 
 @dp.message_handler(commands=['stop_nodes'])
@@ -288,7 +305,7 @@ async def stop_node(message: Message):
     if message.from_user.id == ADMIN:
         nodes_names = message.text.split("/stop_nodes ")[1].split(" ")
         result = await stop_nodes(nodes_names)
-        await bot.send_message(message.from_user.id, result)
+        await send_big_messsage(message.from_user.id, result, "HTML")
 
 
 @dp.message_handler(commands=['start_nodes'])
@@ -296,7 +313,7 @@ async def start_node(message: Message):
     if message.from_user.id == ADMIN:
         nodes_names = message.text.split("/start_nodes ")[1].split(" ")
         result = await start_nodes(nodes_names)
-        await bot.send_message(message.from_user.id, result)
+        await send_big_messsage(message.from_user.id, result, "HTML")
 
 
 loop = asyncio.get_event_loop()
